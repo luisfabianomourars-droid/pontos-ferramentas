@@ -1,10 +1,9 @@
 import React, { useEffect } from 'react';
-import { Auth } from '@supabase/auth-ui-react';
-import { ThemeSupa } from '@supabase/auth-ui-shared';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import CustomAuth from '@/components/CustomAuth';
+import { CalendarDays } from 'lucide-react';
 
 const Login = () => {
   const { user } = useAuth();
@@ -17,51 +16,30 @@ const Login = () => {
   }, [user, navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Sistema de Presença</CardTitle>
-          <CardDescription>
-            Faça login para acessar o sistema de controle de presença
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Auth
-            supabaseClient={supabase}
-            providers={[]}
-            appearance={{
-              theme: ThemeSupa,
-              variables: {
-                default: {
-                  colors: {
-                    brand: '#2563eb',
-                    brandAccent: '#1d4ed8',
-                  },
-                },
-              },
-            }}
-            theme="light"
-            localization={{
-              variables: {
-                sign_in: {
-                  email_label: 'Email',
-                  password_label: 'Senha',
-                  button_label: 'Entrar',
-                  loading_button_label: 'Entrando...',
-                  link_text: 'Já tem uma conta? Entre aqui',
-                },
-                sign_up: {
-                  email_label: 'Email',
-                  password_label: 'Senha',
-                  button_label: 'Criar conta',
-                  loading_button_label: 'Criando conta...',
-                  link_text: 'Não tem uma conta? Cadastre-se',
-                },
-              },
-            }}
-          />
-        </CardContent>
-      </Card>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
+            <div className="bg-blue-600 p-3 rounded-full">
+              <CalendarDays className="h-8 w-8 text-white" />
+            </div>
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Sistema de Presença
+          </h1>
+          <p className="text-gray-600">
+            Controle de presença para sua equipe
+          </p>
+        </div>
+
+        <CustomAuth onSuccess={() => navigate('/dashboard')} />
+
+        <div className="mt-8 text-center">
+          <p className="text-sm text-gray-500">
+            Sistema desenvolvido para controle de presença de funcionários
+          </p>
+        </div>
+      </div>
     </div>
   );
 };
