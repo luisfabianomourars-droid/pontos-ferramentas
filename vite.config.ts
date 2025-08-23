@@ -9,52 +9,51 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-
-  // Configurações de build otimizadas
+  base: "/",
   build: {
     target: "es2020",
     minify: "esbuild",
     sourcemap: false,
+    outDir: "dist",
+    assetsDir: "assets",
     rollupOptions: {
       output: {
         manualChunks: {
           vendor: ["react", "react-dom"],
+          router: ["react-router-dom"],
           ui: [
             "@radix-ui/react-dialog",
             "@radix-ui/react-toast",
             "@radix-ui/react-select",
+            "@radix-ui/react-tabs"
           ],
+          supabase: ["@supabase/supabase-js", "@supabase/auth-ui-react"],
+          utils: ["date-fns", "clsx", "tailwind-merge"]
         },
       },
     },
   },
-
-  // Configurações de servidor de desenvolvimento
   server: {
     port: 5173,
     host: true,
     open: true,
   },
-
-  // Configurações de preview
   preview: {
     port: 4173,
     host: true,
   },
-
-  // Configurações de dependências
   optimizeDeps: {
     include: [
       "react",
       "react-dom",
       "react-router-dom",
       "@tanstack/react-query",
+      "@supabase/supabase-js",
       "sonner",
       "lucide-react",
+      "date-fns"
     ],
   },
-
-  // Configurações de ambiente
   define: {
     "process.env": process.env,
   },
