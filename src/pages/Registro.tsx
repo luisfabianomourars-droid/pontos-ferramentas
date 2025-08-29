@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ArrowLeft, Calendar, Save, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { toast } from 'sonner';
 
 const Registro = () => {
   const { profile } = useAuth();
@@ -36,50 +37,72 @@ const Registro = () => {
   ];
 
   useEffect(() => {
-    if (data) {
+    if (data && profile) {
       checkExistingRecord();
     }
-  }, [data]);
+  }, [data, profile]);
 
   const checkExistingRecord = async () => {
     if (!profile) return;
 
     try {
+      console.log('Verificando registro existente para:', { funcionario_id: profile.id, data });
+      
       const { data: record, error } = await supabase
         .from('registros_presenca')
         .select('*')
         .eq('funcionario_id', profile.id)
         .eq('data', data)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
+      if (error) {
         console.error('Erro ao verificar registro existente:', error);
         return;
       }
 
       if (record) {
+        console.log('Registro existente encontrado:', record);
         setExistingRecord(record);
         setStatus(record.status);
         setObservacoes(record.observacoes || '');
       } else {
+        console.log('Nenhum registro existente encontrado');
         setExistingRecord(null);
         setStatus('');
         setObservacoes('');
       }
     } catch (error) {
       console.error('Erro ao verificar registro:', error);
+      setError('Erro ao verificar registro existente');
     }
+  };
+
+  const handleStatusChange = (value: string) => {
+    console.log('Status selecionado:', value);
+    setStatus(value);
+    setError(null); // Limpar erro quando usuário seleciona um status
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile) return;
+    
+    if (!profile) {
+      setError('Perfil do usuário não encontrado');
+      return;
+    }
+
+    if (!status) {
+      setError('Por favor, selecione um status');
+      return;
+    }
 
     setLoading(true);
     setError(null);
     setSuccess(null);
 
     try {
+      console.log('Salvando registro:', { funcionario_id: profile.id, data, status, observacoes });
+
       const registroData = {
         funcionario_id: profile.id,
         data,
@@ -96,7 +119,9 @@ const Registro = () => {
           .eq('id', existingRecord.id);
 
         if (error) throw error;
+        
         setSuccess('Registro atualizado com sucesso!');
+        toast.success('Registro atualizado com sucesso!');
       } else {
         // Criar novo registro
         const { error } = await supabase
@@ -104,7 +129,9 @@ const Registro = () => {
           .insert([registroData]);
 
         if (error) throw error;
+        
         setSuccess('Registro criado com sucesso!');
+        toast.success('Registro criado com sucesso!');
       }
 
       // Aguardar um pouco antes de redirecionar
@@ -114,13 +141,26 @@ const Registro = () => {
 
     } catch (error: any) {
       console.error('Erro ao salvar registro:', error);
-      setError(error.message || 'Erro ao salvar registro');
+      const errorMessage = error.message || 'Erro ao salvar registro';
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   const selectedStatusOption = statusOptions.find(option => option.value === status);
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando perfil...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -143,7 +183,7 @@ const Registro = () => {
                   {existingRecord ? 'Editar Registro' : 'Novo Registro'}
                 </h1>
                 <p className="text-sm text-gray-500">
-                  Registrar presença para {profile?.nome}
+                  Registrar presença para {profile.nome}
                 </p>
               </div>
             </div>
@@ -187,21 +227,23 @@ const Registro = () => {
                   onChange={(e) => setData(e.target.value)}
                   required
                 />
-                <p className="text-sm text-gray-500">
-                  {format(new Date(data), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                </p>
+                {data && (
+                  <p className="text-sm text-gray-500">
+                    {format(new Date(data + 'T00:00:00'), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="status">Status</Label>
-                <Select value={status} onValueChange={setStatus} required>
+                <Select value={status} onValueChange={handleStatusChange} required>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o status do dia" />
                   </SelectTrigger>
                   <SelectContent>
                     {statusOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
-                        <div>
+                        <div className="py-1">
                           <div className="font-medium">{option.label}</div>
                           <div className="text-sm text-gray-500">{option.description}</div>
                         </div>

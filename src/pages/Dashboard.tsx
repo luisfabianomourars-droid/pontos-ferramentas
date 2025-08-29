@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CalendarDays, Users, Settings, LogOut, Plus } from 'lucide-react';
+import { CalendarDays, Users, Settings, LogOut, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isWeekend } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isWeekend, isSameMonth, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface RegistroPresenca {
@@ -33,6 +32,7 @@ const Dashboard = () => {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [registros, setRegistros] = useState<RegistroPresenca[]>([]);
   const [feriados, setFeriados] = useState<Feriado[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,16 +59,17 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchData();
-  }, [selectedDate]);
+  }, [currentMonth]);
 
   const fetchData = async () => {
     setLoading(true);
     
-    const startDate = startOfMonth(selectedDate);
-    const endDate = endOfMonth(selectedDate);
+    // Buscar dados para todo o período visível no calendário (incluindo dias de outros meses)
+    const startDate = startOfWeek(startOfMonth(currentMonth));
+    const endDate = endOfWeek(endOfMonth(currentMonth));
 
     try {
-      // Buscar registros do mês
+      // Buscar registros do período
       const { data: registrosData, error: registrosError } = await supabase
         .from('registros_presenca')
         .select(`
@@ -80,7 +81,7 @@ const Dashboard = () => {
 
       if (registrosError) throw registrosError;
 
-      // Buscar feriados do mês
+      // Buscar feriados do período
       const { data: feriadosData, error: feriadosError } = await supabase
         .from('feriados')
         .select('*')
@@ -108,47 +109,80 @@ const Dashboard = () => {
     return feriados.find(feriado => feriado.data === dateStr);
   };
 
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      setCurrentMonth(subMonths(currentMonth, 1));
+    } else {
+      setCurrentMonth(addMonths(currentMonth, 1));
+    }
+  };
+
+  const goToToday = () => {
+    const today = new Date();
+    setCurrentMonth(today);
+    setSelectedDate(today);
+  };
+
+  // Gerar todos os dias visíveis no calendário (6 semanas completas)
+  const calendarDays = eachDayOfInterval({
+    start: startOfWeek(startOfMonth(currentMonth)),
+    end: endOfWeek(endOfMonth(currentMonth)),
+  });
+
   const renderCalendarDay = (date: Date) => {
     const registrosDay = getRegistrosForDate(date);
     const feriado = getFeriadoForDate(date);
     const isWeekendDay = isWeekend(date);
+    const isCurrentMonth = isSameMonth(date, currentMonth);
+    const isToday = isSameDay(date, new Date());
+    const isSelected = isSameDay(date, selectedDate);
 
     return (
-      <div className="relative w-full h-full min-h-[80px] p-1">
-        <div className="text-sm font-medium mb-1">
+      <div 
+        className={`
+          relative w-full h-24 p-2 border border-gray-200 cursor-pointer transition-colors
+          ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : 'hover:bg-gray-50'}
+          ${!isCurrentMonth ? 'bg-gray-100 text-gray-400' : 'bg-white'}
+          ${isToday ? 'bg-blue-100' : ''}
+        `}
+        onClick={() => setSelectedDate(date)}
+      >
+        <div className={`text-sm font-medium mb-1 ${isToday ? 'text-blue-600 font-bold' : ''}`}>
           {format(date, 'd')}
         </div>
         
-        {feriado && (
+        {feriado && isCurrentMonth && (
           <div className="text-xs bg-red-100 text-red-800 px-1 py-0.5 rounded mb-1 truncate">
             {feriado.nome}
           </div>
         )}
         
-        {isWeekendDay && !feriado && (
+        {isWeekendDay && !feriado && isCurrentMonth && (
           <div className="text-xs bg-gray-100 text-gray-600 px-1 py-0.5 rounded mb-1">
-            Final de semana
+            FDS
           </div>
         )}
 
-        <div className="space-y-1">
-          {registrosDay.slice(0, 3).map((registro) => (
-            <div
-              key={registro.id}
-              className={`text-xs px-1 py-0.5 rounded text-white truncate ${
-                statusColors[registro.status as keyof typeof statusColors]
-              }`}
-              title={`${registro.profiles.nome} - ${statusLabels[registro.status as keyof typeof statusLabels]}`}
-            >
-              {registro.profiles.nome.split(' ')[0]}
-            </div>
-          ))}
-          {registrosDay.length > 3 && (
-            <div className="text-xs text-gray-500">
-              +{registrosDay.length - 3} mais
-            </div>
-          )}
-        </div>
+        {isCurrentMonth && (
+          <div className="space-y-1">
+            {registrosDay.slice(0, 2).map((registro) => (
+              <div
+                key={registro.id}
+                className={`text-xs px-1 py-0.5 rounded text-white truncate ${
+                  statusColors[registro.status as keyof typeof statusColors]
+                }`}
+                title={`${registro.profiles.nome} - ${statusLabels[registro.status as keyof typeof statusLabels]}`}
+              >
+                {registro.profiles.nome.split(' ')[0]}
+              </div>
+            ))}
+            {registrosDay.length > 2 && (
+              <div className="text-xs text-gray-500">
+                +{registrosDay.length - 2}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -214,11 +248,36 @@ const Dashboard = () => {
             <Card>
               <CardHeader>
                 <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle>Calendário de Presença</CardTitle>
-                    <CardDescription>
-                      {format(selectedDate, 'MMMM yyyy', { locale: ptBR })}
-                    </CardDescription>
+                  <div className="flex items-center space-x-4">
+                    <div>
+                      <CardTitle>Calendário de Presença</CardTitle>
+                      <CardDescription>
+                        {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigateMonth('prev')}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={goToToday}
+                      >
+                        Hoje
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigateMonth('next')}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                   <Button
                     onClick={() => navigate('/registro')}
@@ -235,26 +294,17 @@ const Dashboard = () => {
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-7 gap-1">
+                  <div className="grid grid-cols-7 gap-0 border border-gray-200 rounded-lg overflow-hidden">
                     {/* Cabeçalho dos dias da semana */}
-                    {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
-                      <div key={day} className="p-2 text-center text-sm font-medium text-gray-500">
+                    {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((day) => (
+                      <div key={day} className="p-3 text-center text-sm font-semibold text-gray-700 bg-gray-50 border-b border-gray-200">
                         {day}
                       </div>
                     ))}
                     
-                    {/* Dias do mês */}
-                    {eachDayOfInterval({
-                      start: startOfMonth(selectedDate),
-                      end: endOfMonth(selectedDate),
-                    }).map((date) => (
-                      <div
-                        key={date.toISOString()}
-                        className={`border rounded-lg cursor-pointer hover:bg-gray-50 ${
-                          isSameDay(date, selectedDate) ? 'ring-2 ring-blue-500' : ''
-                        }`}
-                        onClick={() => setSelectedDate(date)}
-                      >
+                    {/* Dias do calendário */}
+                    {calendarDays.map((date) => (
+                      <div key={date.toISOString()}>
                         {renderCalendarDay(date)}
                       </div>
                     ))}
@@ -309,7 +359,7 @@ const Dashboard = () => {
                 <CardTitle className="text-lg">Legenda</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2">
                   {Object.entries(statusLabels).map(([status, label]) => (
                     <div key={status} className="flex items-center space-x-2">
                       <div className={`w-3 h-3 rounded ${statusColors[status as keyof typeof statusColors]}`}></div>
