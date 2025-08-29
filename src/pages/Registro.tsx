@@ -18,8 +18,8 @@ const Registro = () => {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [checkingRecord, setCheckingRecord] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   const [data, setData] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [status, setStatus] = useState('');
@@ -43,11 +43,12 @@ const Registro = () => {
   }, [data, profile]);
 
   const checkExistingRecord = async () => {
-    if (!profile) return;
+    if (!profile || !data) return;
+
+    setCheckingRecord(true);
+    setError(null);
 
     try {
-      console.log('Verificando registro existente para:', { funcionario_id: profile.id, data });
-      
       const { data: record, error } = await supabase
         .from('registros_presenca')
         .select('*')
@@ -55,32 +56,25 @@ const Registro = () => {
         .eq('data', data)
         .maybeSingle();
 
-      if (error) {
-        console.error('Erro ao verificar registro existente:', error);
-        return;
+      if (error && error.code !== 'PGRST116') {
+        throw error;
       }
 
       if (record) {
-        console.log('Registro existente encontrado:', record);
         setExistingRecord(record);
         setStatus(record.status);
         setObservacoes(record.observacoes || '');
       } else {
-        console.log('Nenhum registro existente encontrado');
         setExistingRecord(null);
         setStatus('');
         setObservacoes('');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao verificar registro:', error);
       setError('Erro ao verificar registro existente');
+    } finally {
+      setCheckingRecord(false);
     }
-  };
-
-  const handleStatusChange = (value: string) => {
-    console.log('Status selecionado:', value);
-    setStatus(value);
-    setError(null); // Limpar erro quando usuário seleciona um status
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -96,13 +90,15 @@ const Registro = () => {
       return;
     }
 
+    if (!data) {
+      setError('Por favor, selecione uma data');
+      return;
+    }
+
     setLoading(true);
     setError(null);
-    setSuccess(null);
 
     try {
-      console.log('Salvando registro:', { funcionario_id: profile.id, data, status, observacoes });
-
       const registroData = {
         funcionario_id: profile.id,
         data,
@@ -112,7 +108,6 @@ const Registro = () => {
       };
 
       if (existingRecord) {
-        // Atualizar registro existente
         const { error } = await supabase
           .from('registros_presenca')
           .update(registroData)
@@ -120,24 +115,21 @@ const Registro = () => {
 
         if (error) throw error;
         
-        setSuccess('Registro atualizado com sucesso!');
         toast.success('Registro atualizado com sucesso!');
       } else {
-        // Criar novo registro
         const { error } = await supabase
           .from('registros_presenca')
           .insert([registroData]);
 
         if (error) throw error;
         
-        setSuccess('Registro criado com sucesso!');
         toast.success('Registro criado com sucesso!');
       }
 
-      // Aguardar um pouco antes de redirecionar
+      // Redirecionar após sucesso
       setTimeout(() => {
         navigate('/dashboard');
-      }, 1500);
+      }, 1000);
 
     } catch (error: any) {
       console.error('Erro ao salvar registro:', error);
@@ -153,7 +145,7 @@ const Registro = () => {
 
   if (!profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Carregando perfil...</p>
@@ -172,17 +164,18 @@ const Registro = () => {
               variant="ghost"
               onClick={() => navigate('/dashboard')}
               className="flex items-center space-x-2 mr-4"
+              size="sm"
             >
               <ArrowLeft className="h-4 w-4" />
               <span>Voltar</span>
             </Button>
             <div className="flex items-center space-x-4">
-              <Calendar className="h-6 w-6 text-blue-600" />
+              <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">
+                <h1 className="text-lg sm:text-xl font-semibold text-gray-900">
                   {existingRecord ? 'Editar Registro' : 'Novo Registro'}
                 </h1>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 hidden sm:block">
                   Registrar presença para {profile.nome}
                 </p>
               </div>
@@ -191,10 +184,10 @@ const Registro = () => {
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         <Card>
           <CardHeader>
-            <CardTitle>
+            <CardTitle className="text-lg sm:text-xl">
               {existingRecord ? 'Editar Registro de Presença' : 'Novo Registro de Presença'}
             </CardTitle>
             <CardDescription>
@@ -211,12 +204,6 @@ const Registro = () => {
               </Alert>
             )}
 
-            {success && (
-              <Alert className="mb-6 border-green-200 bg-green-50">
-                <AlertDescription className="text-green-800">{success}</AlertDescription>
-              </Alert>
-            )}
-
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="data">Data</Label>
@@ -226,6 +213,7 @@ const Registro = () => {
                   value={data}
                   onChange={(e) => setData(e.target.value)}
                   required
+                  disabled={checkingRecord}
                 />
                 {data && (
                   <p className="text-sm text-gray-500">
@@ -236,7 +224,12 @@ const Registro = () => {
 
               <div className="space-y-2">
                 <Label htmlFor="status">Status</Label>
-                <Select value={status} onValueChange={handleStatusChange} required>
+                <Select 
+                  value={status} 
+                  onValueChange={setStatus} 
+                  required
+                  disabled={checkingRecord || loading}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o status do dia" />
                   </SelectTrigger>
@@ -266,6 +259,7 @@ const Registro = () => {
                   value={observacoes}
                   onChange={(e) => setObservacoes(e.target.value)}
                   rows={3}
+                  disabled={loading}
                 />
                 <p className="text-sm text-gray-500">
                   Informações adicionais sobre o dia de trabalho
@@ -280,10 +274,10 @@ const Registro = () => {
                 </Alert>
               )}
 
-              <div className="flex space-x-4">
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
                 <Button
                   type="submit"
-                  disabled={loading || !status}
+                  disabled={loading || !status || checkingRecord}
                   className="flex-1 flex items-center justify-center space-x-2"
                 >
                   {loading ? (
@@ -304,6 +298,7 @@ const Registro = () => {
                   variant="outline"
                   onClick={() => navigate('/dashboard')}
                   disabled={loading}
+                  className="flex-1 sm:flex-none"
                 >
                   Cancelar
                 </Button>
